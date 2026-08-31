@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zebra Browser Print - Connection Test</title>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.3rem; }
+  .step { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  .status { font-weight: bold; }
+  .ok { color: #1a7f37; }
+  .fail { color: #c0392b; }
+  .pending { color: #888; }
+  button { padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; }
+  pre { background: #f5f5f5; padding: 0.75rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; }
+  .note { font-size: 0.85rem; color: #555; }
+</style>
+</head>
+<body>
+
+<h1>Zebra Browser Print - Connection Test</h1>
+<p class="note">Standalone test page - not part of the main tool. Open this directly in Chrome on the register laptop after installing Zebra Browser Print.</p>
+
+<div class="step">
+  <div>1. Checking if the Browser Print agent is running...</div>
+  <div class="status pending" id="agentStatus">Checking...</div>
+  <pre id="agentOutput" style="display:none;"></pre>
+</div>
+
+<div class="step">
+  <div>2. Send a test label to the ZD411</div>
+  <button id="printBtn" disabled>Print Test Label</button>
+  <div class="status" id="printStatus"></div>
+</div>
+
+<script>
+const AGENT_URL = 'http://127.0.0.1:9100';
+
+async function checkAgent() {
+  const statusEl = document.getElementById('agentStatus');
+  const outputEl = document.getElementById('agentOutput');
+  const printBtn = document.getElementById('printBtn');
+  try {
+    const resp = await fetch(AGENT_URL + '/available');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    statusEl.textContent = 'Connected - Browser Print agent found a printer.';
+    statusEl.className = 'status ok';
+    outputEl.style.display = 'block';
+    outputEl.textContent = text;
+    printBtn.disabled = false;
+  } catch (err) {
+    statusEl.textContent = 'Not connected: ' + err.message + ' (is Browser Print installed and running? Check the system tray.)';
+    statusEl.className = 'status fail';
+  }
+}
+
+document.getElementById('printBtn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('printStatus');
+  statusEl.textContent = 'Sending...';
+  statusEl.className = 'status pending';
+  const zpl = "^XA\n^FO30,30^A0N,30,30^FDBrowser Print Test^FS\n^FO30,70^A0N,20,20^FDIf this printed, the connection works!^FS\n^XZ\n";
+  try {
+    const defResp = await fetch(AGENT_URL + '/default?type=printer');
+    if (!defResp.ok) throw new Error('Could not get default printer (HTTP ' + defResp.status + ')');
+    const device = await defResp.json();
+
+    const form = new FormData();
+    form.append('device', JSON.stringify(device));
+    form.append('data', zpl);
+
+    const writeResp = await fetch(AGENT_URL + '/write', { method: 'POST', body: form });
+    if (!writeResp.ok) throw new Error('Print request failed (HTTP ' + writeResp.status + ')');
+    statusEl.textContent = 'Sent! Check the printer.';
+    statusEl.className = 'status ok';
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+    statusEl.className = 'status fail';
+  }
+});
+
+checkAgent();
+</script>
+
+</body>
+</html>
